@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+    <style>
+        body { margin: 0; background: #222; overflow: hidden; font-family: 'Press Start 2P', cursive; }
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap'); /* Fuente pixel-art */
+        canvas { display: block; image-rendering: pixelated; }
+        #ui {
+            position: absolute; top: 10px; left: 10px; color: #fff; font-size: 14px;
+            text-shadow: 2px 2px #000; pointer-events: none;
+        }
+        #menu {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center; background: rgba(0,0,0,0.8); padding: 25px;
+            border: 3px solid #FFD700; border-radius: 8px; box-shadow: 0 0 15px #FFD700;
+        }
+        #menu h1 { color: #FFD700; font-size: 28px; margin-bottom: 15px; text-shadow: 3px 3px #000; }
+        #menu p { color: #fff; font-size: 16px; margin-bottom: 20px; }
+        #menu button {
+            background: #FF4500; border: none; color: white; padding: 12px 25px;
+            font-size: 18px; border-radius: 5px; cursor: pointer;
+            box-shadow: 3px 3px #8B0000;
+        }
+        #menu button:active { transform: translateY(2px); box-shadow: 1px 1px #8B0000; }
+    </style>
+</head>
+<body>
+    <div id="ui">SCORE: 000 | COINS: 00</div>
+    <div id="menu">
+        <h1>PIXEL RACER</h1>
+        <p id="msg">¡Toca y desliza para derrapar!</p>
+        <button onclick="startGame()">EMPEZAR</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const ui = document.getElementById('ui');
+    const menu = document.getElementById('menu');
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Game variables
+    let player = { x: canvas.width / 2, y: canvas.height - 100, width: 20, height: 40, color: '#00FF00', speed: 5, driftSpeed: 0 };
+    let enemies = [];
+    let coins = [];
+    let boosts = [];
+    let score = 0;
+    let totalCoins = 0;
+    let gameActive = false;
+    let roadSpeed = 5;
+    let spawnRate = 1500; // ms
+
+    // Game states and input
+    let lastTouchX = canvas.width / 2;
+    let isTouching = false;
+
+    // Road lines (for visual effect)
+    let roadLines = [];
+
+    // Helper to draw pixel art rectangles
+    function drawPixelRect(x, y, w, h, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(Math.floor(x), Math.floor(y), Math.floor(w), Math.floor(h));
+    }
+
+    // Initialize road lines
+    for (let i = 0; i < 10; i++) {
+        roadLines.push({ y: i * (canvas.height / 10), width: 10, height: 40, color: '#666' });
+    }
+
+    function createRoadLine(y) {
+        return {
+            x: canvas.width / 2 - 5,
+            y: y,
+            width: 10,
+            height: 40,
+            color: '#666'
+        };
+    }
+
+    canvas.addEventListener('touchstart', (e) => {
+        if (!gameActive) return;
+        isTouching = true;
+        lastTouchX = e.touches[0].clientX;
+        player.driftSpeed = 0; // Reset drift on new touch
+        e.preventDefault();
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+        if (!gameActive || !isTouching) return;
+        let touchX = e.touches[0].clientX;
+        let deltaX = touchX - lastTouchX;
+        player.driftSpeed = deltaX * 0.5; // Adjust drift sensitivity
+        lastTouchX = touchX;
+        e.preventDefault();
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', () => {
+        isTouching = false;
+        player.driftSpeed = 0; // Stop drifting
+    });
+
+    function spawnObject(type) {
+        if (!gameActive) return;
+        let obj = {
+            x: Math.random() * (canvas.width - 40) + 20,
+            y: -50,
+            type: type, // 'enemy', 'coin', 'boost'
+            speed: (3 + Math.random() * 3) * (roadSpeed / 5)
+        };
+
+        if (type === 'enemy') {
+            obj.width = 30 + Math.random() * 40;
+            obj.height = 30;
+            enemies.push(obj);
+        } else if (type === 'coin') {
+            obj.width = 15;
+            obj.height = 15;
+            coins.push(obj);
+        } else if (type === 'boost') {
+            obj.width = 20;
+            obj.height = 20;
+            boosts.push(obj);
+        }
+
+        setTimeout(() => spawnObject(Math.random() < 0.6 ? 'enemy' : Math.random() < 0.8 ? 'coin' : 'boost'), spawnRate / speedMultiplier);
+    }
+
+    function startGame() {
+        gameActive = true;
+        menu.style.display = 'none';
+        score = 0;
+        totalCoins = 0;
+        player.x = canvas.width / 2;
+        enemies = [];
+        coins = [];
+        boosts = [];
+        roadSpeed = 5;
+        spawnRate = 1500;
+        speedMultiplier = 1;
+
+        spawnObject('enemy');
+        spawnObject('coin');
+        spawnObject('boost');
+        updateGame();
+    }
+
+    function updateGame() {
+        if (!gameActive) return;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#333'; // Road background
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Update & Draw Road Lines
+        for (let i = 0; i < roadLines.length; i++) {
+            roadLines[i].y += roadSpeed;
+            if (roadLines[i].y > canvas.height) {
+                roadLines[i].y = -roadLines[i].height;
+            }
+            drawPixelRect(roadLines[i].x, roadLines[i].y, roadLines[i].width, roadLines[i].height, roadLines[i].color);
+        }
+
+
+        // Player movement with drift
+        player.x += player.driftSpeed;
+        player.x = Math.max(0, Math.min(canvas.width - player.width, player.x)); // Keep player on screen
+
+        // Draw Player
+        drawPixelRect(player.x, player.y, player.width, player.height, player.color);
+
+        // Update & Draw Enemies
+        enemies.forEach((en, index) => {
+            en.y += en.speed;
+            drawPixelRect(en.x, en.y, en.width, en.height, '#FF4500'); // Red enemies
+
+            // Collision with player
+            if (player.x < en.x + en.width &&
+                player.x + player.width > en.x &&
+                player.y < en.y + en.height &&
+                player.y + player.height > en.y) {
+                gameOver();
+            }
+
+            // Remove if off screen
+            if (en.y > canvas.height) {
+                enemies.splice(index, 1);
+                score++;
+                if (score % 5 === 0) { // Increase speed every 5 points
+                    roadSpeed += 0.5;
+                    spawnRate = Math.max(500, spawnRate - 50); // Increase spawn rate
+                }
+            }
+        });
+
+        // Update & Draw Coins
+        coins.forEach((coin, index) => {
+            coin.y += coin.speed;
+            drawPixelRect(coin.x, coin.y, coin.width, coin.height, '#FFD700'); // Gold coins
+
+            // Collision with player
+            if (player.x < coin.x + coin.width &&
+                player.x + player.width > coin.x &&
+                player.y < coin.y + coin.height &&
+                player.y + player.height > coin.y) {
+                coins.splice(index, 1);
+                totalCoins++;
+                // Play a coin sound or visual effect here
+            }
+            if (coin.y > canvas.height) {
+                coins.splice(index, 1);
+            }
+        });
+
+        // Update & Draw Boosts
+        boosts.forEach((boost, index) => {
+            boost.y += boost.speed;
+            drawPixelRect(boost.x, boost.y, boost.width, boost.height, '#00FFFF'); // Cyan boosts
+
+            // Collision with player
+            if (player.x < boost.x + boost.width &&
+                player.x + player.width > boost.x &&
+                player.y < boost.y + boost.height &&
+                player.y + player.height > boost.y) {
+                boosts.splice(index, 1);
+                // Apply boost effect (e.g., temporary invincibility, speed burst)
+                roadSpeed += 3; // Temporary speed boost
+                setTimeout(() => roadSpeed = Math.max(5, roadSpeed - 3), 1500); // Reduce speed after 1.5s
+            }
+            if (boost.y > canvas.height) {
+                boosts.splice(index, 1);
+            }
+        });
+
+        // Update UI
+        ui.innerText = `SCORE: ${String(score).padStart(3, '0')} | COINS: ${String(totalCoins).padStart(2, '0')}`;
+
+        requestAnimationFrame(updateGame);
+    }
+
+    function gameOver() {
+        gameActive = false;
+        menu.style.display = 'block';
+        document.getElementById('title').innerText = "¡CRASH!";
+        document.getElementById('msg').innerText = `Tu Score: ${score}\nMonedas Ganadas: ${totalCoins}`;
+        
+        // --- PUNTO DE MONETIZACIÓN CLAVE ---
+        if (score > 5 || totalCoins > 0) { // Si el jugador jugó algo o ganó monedas
+            // Aquí se integraría un anuncio intersticial (pantalla completa)
+            // o un anuncio de video recompensado para "continuar" o "duplicar monedas".
+            console.log("Juego terminado. Momento ideal para mostrar un anuncio.");
+            // Ejemplo de llamada a función de anuncio (placeholder)
+            // showAd();
+        }
+    }
+
+    // Adjust canvas on window resize
+    window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        // Reposition player if game is active
+        if (gameActive) {
+            player.x = canvas.width / 2;
+            player.y = canvas.height - 100;
+        }
+    });
+
+</script>
+</body>
+</html>
